@@ -12,6 +12,16 @@ Aplicação pessoal de controle financeiro: categoriza receitas e despesas, proj
 - **Importação** de extratos (CSV/XLSX), com parsing de datas e valores em formato brasileiro.
 - **Sincronização automática** com contas bancárias via [Pluggy](https://pluggy.ai) (Open Finance), com deduplicação por ID da transação.
 
+## Screenshots
+
+| Dashboard | Lançamentos |
+| --- | --- |
+| ![Dashboard](static/screenshots/dashboard.jpg) | ![Lançamentos](static/screenshots/lancamentos.jpg) |
+
+| Categorias | Importação |
+| --- | --- |
+| ![Categorias](static/screenshots/categorias.jpg) | ![Importação](static/screenshots/importar.jpg) |
+
 ## Stack
 
 - [SvelteKit 2](https://svelte.dev/docs/kit) + [Svelte 5](https://svelte.dev/docs/svelte) + TypeScript
