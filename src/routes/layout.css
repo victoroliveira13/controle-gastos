@@ -1,0 +1,28 @@
+@import 'tailwindcss';
+
+/* Restaura centramento nativo do <dialog> que o Tailwind reset remove */
+dialog {
+	position: fixed;
+	inset: 0;
+	margin: auto;
+	height: fit-content;
+	max-height: 90vh;
+	overflow-y: auto;
+}
+
+/* Dark mode — inverte a escala slate usando as CSS vars do Tailwind v4 */
+.dark {
+	color-scheme: dark;
+	--color-white: oklch(27.9% 0.041 260);
+	--color-slate-50: oklch(20.8% 0.042 265.8);
+	--color-slate-100: oklch(27.9% 0.041 260);
+	--color-slate-200: oklch(37.2% 0.044 257.1);
+	--color-slate-300: oklch(44.6% 0.043 257.3);
+	--color-slate-400: oklch(55.4% 0.046 257.4);
+	--color-slate-500: oklch(70.4% 0.04 256.8);
+	--color-slate-600: oklch(87.2% 0.02 258.3);
+	--color-slate-700: oklch(93% 0.013 255.5);
+	--color-slate-800: oklch(96.8% 0.007 247.8);
+	--color-slate-900: oklch(98.4% 0.003 247.8);
+}
+
