@@ -6,14 +6,15 @@
 
 	let { children } = $props();
 
-	// Restore dark mode from localStorage and sync state
-	$effect(() => {
-		if (!browser) return;
+	// Lê o tema salvo uma vez; só depois disso passa a persistir (evita sobrescrever com o default)
+	let themeReady = false;
+	if (browser) {
 		display.dark = localStorage.getItem('dark') === 'true';
-	});
+		themeReady = true;
+	}
 
 	$effect(() => {
-		if (!browser) return;
+		if (!browser || !themeReady) return;
 		document.documentElement.classList.toggle('dark', display.dark);
 		localStorage.setItem('dark', String(display.dark));
 	});
