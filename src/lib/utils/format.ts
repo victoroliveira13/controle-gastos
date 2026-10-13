@@ -66,14 +66,14 @@ export function parseDate(raw: string | number): string | null {
 }
 
 export const GROUP_COLORS: Record<string, string> = {
-	R: '#10b981',
-	A: '#f59e0b',
-	M: '#3b82f6',
-	E: '#8b5cf6',
-	C: '#ec4899',
-	S: '#ef4444',
-	T: '#06b6d4',
-	P: '#f97316',
-	L: '#84cc16',
-	F: '#6366f1'
+	R: '#157a00',
+	A: '#9a6b12',
+	M: '#1f6f8c',
+	E: '#7a4b8f',
+	C: '#b23a4e',
+	S: '#8a4b2a',
+	T: '#2552cc',
+	P: '#d1a44a',
+	L: '#5e7a1e',
+	F: '#2b3a54'
 };

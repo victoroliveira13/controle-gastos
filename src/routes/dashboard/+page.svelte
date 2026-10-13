@@ -128,8 +128,8 @@
 		},
 		yAxis: { type: 'value', axisLabel: { formatter: (v: number) => `R$${(v / 1000).toFixed(0)}k`, fontSize: 11 } },
 		series: [
-			{ name: 'Receitas', type: 'bar', data: data.incomeArr, itemStyle: { color: '#10b981' }, barMaxWidth: 28 },
-			{ name: 'Despesas', type: 'bar', data: data.expenseArr, itemStyle: { color: '#ef4444' }, barMaxWidth: 28 }
+			{ name: 'Receitas', type: 'bar', data: data.incomeArr, itemStyle: { color: '#157a00' }, barMaxWidth: 28 },
+			{ name: 'Despesas', type: 'bar', data: data.expenseArr, itemStyle: { color: '#b23a4e' }, barMaxWidth: 28 }
 		]
 	});
 
@@ -393,7 +393,7 @@
 						{:else}
 							<div
 								class="h-2 rounded-full transition-all"
-								style="width:{pct}%; background:{over ? '#ef4444' : color}"
+								style="width:{pct}%; background:{over ? '#b23a4e' : color}"
 							></div>
 						{/if}
 					</div>

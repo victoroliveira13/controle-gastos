@@ -1,5 +1,141 @@
 @import 'tailwindcss';
 
+/*
+ * Design system espelhado do Monitor da Integração (sop_integracao-hubspot, Commons/Dashboard.css):
+ * tema claro nativo Sankhya (verde #008561), Roboto 13px, cards com borda + sombra suave, header com abas.
+ * As escalas indigo/emerald/red/slate do Tailwind são remapeadas aqui, então todas as telas herdam o visual.
+ */
+@theme {
+	--font-sans: 'Roboto', -apple-system, 'Segoe UI', sans-serif;
+
+	--radius-lg: 8px;
+	--radius-xl: 10px;
+	--radius-2xl: 12px;
+	--shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06), 0 6px 20px rgba(16, 24, 40, 0.08);
+
+	/* neutros (--bg2, --bd2, --bd, --t3, --t2, --t1, --brandp do monitor) */
+	--color-white: #ffffff;
+	--color-slate-50: #f4f6f9;
+	--color-slate-100: #edeff2;
+	--color-slate-200: #c8ccd3;
+	--color-slate-300: #b0b6c0;
+	--color-slate-400: #848d9c;
+	--color-slate-500: #6b7585;
+	--color-slate-600: #515d6e;
+	--color-slate-700: #404e65;
+	--color-slate-800: #2f3b50;
+	--color-slate-900: #2b3a54;
+
+	/* accent: verde Sankhya (indigo vira o verde da marca) */
+	--color-indigo-50: #e6f3ef;
+	--color-indigo-100: #d3eae3;
+	--color-indigo-200: #bddfd6;
+	--color-indigo-300: #7fc0ae;
+	--color-indigo-400: #1a9171;
+	--color-indigo-500: #008561;
+	--color-indigo-600: #008561;
+	--color-indigo-700: #00523c;
+	--color-indigo-800: #00402f;
+
+	/* positivo (--pos / --grn) */
+	--color-emerald-50: #e6f3ef;
+	--color-emerald-100: #d3eae3;
+	--color-emerald-200: #bddfd6;
+	--color-emerald-400: #3f9a2e;
+	--color-emerald-500: #157a00;
+	--color-emerald-600: #157a00;
+	--color-emerald-700: #115f00;
+	--color-emerald-800: #0d4a00;
+
+	/* negativo (--neg / --red) */
+	--color-red-50: #fbeaed;
+	--color-red-100: #f6d3d9;
+	--color-red-200: #eeb3bd;
+	--color-red-300: #df8696;
+	--color-red-400: #cb5c71;
+	--color-red-500: #b23a4e;
+	--color-red-600: #b23a4e;
+	--color-red-700: #922f40;
+	--color-red-800: #732433;
+
+	/* atenção (--ylw) */
+	--color-amber-50: #eef3dd;
+	--color-amber-100: #e2ebc4;
+	--color-amber-300: #b6c97a;
+	--color-amber-500: #8da42f;
+	--color-amber-600: #5e7a1e;
+	--color-amber-700: #4a6118;
+}
+
+/* Tema escuro do monitor (.theme-dark): --bg #171f2e, --card #222d42, --bd #33415c */
+.dark {
+	color-scheme: dark;
+	--color-white: #222d42;
+	--color-slate-50: #1e2839;
+	--color-slate-100: #2b3852;
+	--color-slate-200: #33415c;
+	--color-slate-300: #44547a;
+	--color-slate-400: #8b96ac;
+	--color-slate-500: #a9b3c6;
+	--color-slate-600: #cbd3e1;
+	--color-slate-700: #e3e8f0;
+	--color-slate-800: #f0f3f8;
+	--color-slate-900: #f4f6f9;
+
+	--color-indigo-50: rgba(0, 133, 97, 0.2);
+	--color-indigo-100: rgba(0, 133, 97, 0.3);
+	--color-indigo-200: #0a7a5c;
+	--color-indigo-300: #2f9a7d;
+	--color-indigo-400: #42a58a;
+	--color-indigo-500: #42a58a;
+	--color-indigo-600: #008561;
+	--color-indigo-700: #6bb8a3;
+	--color-indigo-800: #bddfd6;
+
+	--color-emerald-50: rgba(66, 165, 138, 0.16);
+	--color-emerald-100: rgba(66, 165, 138, 0.26);
+	--color-emerald-200: #1f6b57;
+	--color-emerald-400: #5fcf9c;
+	--color-emerald-500: #5fcf9c;
+	--color-emerald-600: #5fcf9c;
+	--color-emerald-700: #7fdcb0;
+	--color-emerald-800: #a4e8c6;
+
+	--color-red-50: rgba(189, 0, 37, 0.16);
+	--color-red-100: rgba(189, 0, 37, 0.26);
+	--color-red-200: #7a2a38;
+	--color-red-300: #9a3a4a;
+	--color-red-400: #e79aa6;
+	--color-red-500: #e79aa6;
+	--color-red-600: #e79aa6;
+	--color-red-700: #f0b3bc;
+	--color-red-800: #f6cbd1;
+
+	--color-amber-50: rgba(66, 165, 138, 0.16);
+	--color-amber-100: rgba(66, 165, 138, 0.26);
+	--color-amber-300: #4d7a63;
+	--color-amber-500: #8fc7a8;
+	--color-amber-600: #8fc7a8;
+	--color-amber-700: #a9d6bd;
+}
+
+html {
+	background: #eaebee; /* --bg */
+	-webkit-font-smoothing: antialiased;
+	accent-color: #008561;
+}
+html.dark {
+	background: #171f2e;
+}
+
+body {
+	font-family: var(--font-sans);
+	font-size: 13px;
+	line-height: 1.45;
+	color: var(--color-slate-700);
+	font-variant-numeric: tabular-nums;
+}
+
 /* Restaura centramento nativo do <dialog> que o Tailwind reset remove */
 dialog {
 	position: fixed;
@@ -8,21 +144,77 @@ dialog {
 	height: fit-content;
 	max-height: 90vh;
 	overflow-y: auto;
+	color: var(--color-slate-700);
 }
 
-/* Dark mode — inverte a escala slate usando as CSS vars do Tailwind v4 */
-.dark {
-	color-scheme: dark;
-	--color-white: oklch(27.9% 0.041 260);
-	--color-slate-50: oklch(20.8% 0.042 265.8);
-	--color-slate-100: oklch(27.9% 0.041 260);
-	--color-slate-200: oklch(37.2% 0.044 257.1);
-	--color-slate-300: oklch(44.6% 0.043 257.3);
-	--color-slate-400: oklch(55.4% 0.046 257.4);
-	--color-slate-500: oklch(70.4% 0.04 256.8);
-	--color-slate-600: oklch(87.2% 0.02 258.3);
-	--color-slate-700: oklch(93% 0.013 255.5);
-	--color-slate-800: oklch(96.8% 0.007 247.8);
-	--color-slate-900: oklch(98.4% 0.003 247.8);
+/* título de página: sóbrio, como o h1 do header do monitor */
+h1 {
+	font-size: 18px !important;
+	font-weight: 600 !important;
+	letter-spacing: -0.2px;
+	color: var(--color-slate-700) !important;
 }
 
+/* cards: borda --bd do monitor */
+.rounded-xl.border-slate-100,
+.rounded-xl.border-slate-200 {
+	border-color: var(--color-slate-200);
+}
+
+/* tabelas: cabeçalho .ghead (caixa-alta, 10.5px) e hover de linha --rowhover */
+table thead {
+	background: var(--color-slate-50);
+	border-bottom: 1px solid var(--color-slate-200);
+}
+table thead th {
+	font-size: 10.5px;
+	font-weight: 700;
+	letter-spacing: 0.4px;
+	text-transform: uppercase;
+	color: var(--color-slate-400);
+}
+table tbody tr:hover {
+	background: var(--color-indigo-50);
+}
+
+/* campos: foco com outline accent, como os inputs do drawer */
+input,
+select,
+textarea {
+	font-family: var(--font-sans);
+	background-color: var(--color-white);
+	color: var(--color-slate-700);
+}
+input:focus,
+select:focus,
+textarea:focus {
+	outline: 2px solid #008561;
+	outline-offset: 1px;
+	border-color: #008561;
+}
+.dark input:focus,
+.dark select:focus,
+.dark textarea:focus {
+	outline-color: #42a58a;
+}
+
+/* scrollbars finas */
+* {
+	scrollbar-width: thin;
+	scrollbar-color: var(--color-slate-200) transparent;
+}
+
+/* animação de entrada das views */
+@keyframes fade {
+	from {
+		opacity: 0;
+		transform: translateY(4px);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+.view-in {
+	animation: fade 0.25s ease;
+}
