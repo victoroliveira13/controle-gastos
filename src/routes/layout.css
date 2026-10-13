@@ -1,5 +1,8 @@
 @import 'tailwindcss';
 
+/* dark: segue a classe .dark (botão do header), não o tema do sistema operacional */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /*
  * Design system espelhado do Monitor da Integração (sop_integracao-hubspot, Commons/Dashboard.css):
  * tema claro nativo Sankhya (verde #008561), Roboto 13px, cards com borda + sombra suave, header com abas.
