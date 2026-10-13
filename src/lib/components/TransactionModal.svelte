@@ -24,18 +24,21 @@
 		open: boolean;
 		categories: CategoryOption[];
 		transaction?: TransactionRow | null;
+		defaultDate?: string;
 		onClose: () => void;
 	}
 
-	let { open, categories, transaction = null, onClose }: Props = $props();
+	let { open, categories, transaction = null, defaultDate, onClose }: Props = $props();
 
 	let dialog: HTMLDialogElement;
 	let formType = $state<'income' | 'expense'>('expense');
 	let rawCents = $state(0);
+	let formDate = $state('');
 
 	$effect(() => {
 		formType = transaction?.type ?? 'expense';
 		rawCents = Math.round((transaction?.amount ?? 0) * 100);
+		formDate = transaction?.date ?? defaultDate ?? todayISO();
 		if (open) dialog?.showModal();
 		else dialog?.close();
 	});
@@ -127,7 +130,7 @@
 					id="date"
 					name="date"
 					type="date"
-					value={transaction?.date ?? todayISO()}
+					bind:value={formDate}
 					required
 					class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
 				/>

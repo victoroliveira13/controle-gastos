@@ -10,10 +10,36 @@ let { data }: { data: PageData } = $props();
 let rawCents = $state<Record<number, number>>({});
 let saving = $state<Record<number, boolean>>({});
 
+let incomeCents = $state<number | null>(null);
+let savingIncome = $state(false);
+
 $effect(() => {
 	void data.ym;
 	rawCents = {};
+	incomeCents = null;
 });
+
+const savedIncomeCents = $derived(Math.round((Number(data.incomeForecast) || 0) * 100));
+const incomeForecast = $derived((incomeCents ?? savedIncomeCents) / 100);
+
+function handleIncomeKey(e: KeyboardEvent) {
+	const cur = incomeCents ?? savedIncomeCents;
+	if (e.key >= '0' && e.key <= '9') {
+		e.preventDefault();
+		incomeCents = cur * 10 + parseInt(e.key);
+	} else if (e.key === 'Backspace') {
+		e.preventDefault();
+		incomeCents = Math.floor(cur / 10);
+	}
+}
+
+async function saveIncome() {
+	savingIncome = true;
+	const fd = new FormData();
+	fd.append('amount', String(incomeForecast));
+	await fetch(`?/saveIncome&month=${data.ym}`, { method: 'POST', body: fd });
+	savingIncome = false;
+}
 
 function getCents(id: number): number {
 	if (id in rawCents) return rawCents[id];
@@ -55,6 +81,8 @@ function groupTotal(g: typeof data.groups[number]) {
 
 const grandTotal = $derived.by(() => data.groups.reduce((s, g) => s + groupTotal(g), 0));
 
+const sobra = $derived(incomeForecast - grandTotal);
+
 function navigate(dir: "prev" | "next") {
 	const m = dir === "prev" ? prevMonth(data.ym) : nextMonth(data.ym);
 	goto(`/previsto?month=${m}`);
@@ -88,6 +116,7 @@ async function clearGroup(groupId: number) {
 async function clearAll() {
 	showClearConfirm = false;
 	for (const group of data.groups) for (const cat of group.categories) rawCents[cat.id] = 0;
+	incomeCents = 0;
 	await fetch(`?/clearAll&month=${data.ym}`, { method: 'POST', body: new FormData() });
 }
 
@@ -132,6 +161,29 @@ async function saveOne(catId: number) {
 	</svg>
 	<span>Limpar tudo</span>
 </button>
+</div>
+</div>
+
+<!-- Proventos previstos -->
+<div class="mb-5 flex items-center justify-between rounded-xl border border-emerald-100 bg-emerald-50/50 px-5 py-4 shadow-sm">
+<div>
+<div class="text-sm font-semibold text-slate-800">Proventos previstos</div>
+<div class="text-xs text-slate-500">Quanto você espera receber em {monthLabel(data.ym)}</div>
+</div>
+<div class="flex items-center gap-1.5">
+{#if savingIncome}
+<span class="text-xs text-slate-400">💾</span>
+{/if}
+<span class="text-xs text-slate-400">R$</span>
+<input
+readonly
+inputmode="numeric"
+value={incomeForecast.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+onkeydown={handleIncomeKey}
+onblur={saveIncome}
+class="w-40 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-right text-sm font-semibold text-emerald-700 focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+placeholder="0,00"
+/>
 </div>
 </div>
 
@@ -201,10 +253,18 @@ placeholder="0,00"
 </div>
 
 <!-- Footer total -->
-<div class="mt-5 rounded-xl border border-slate-200 bg-slate-50 px-5 py-4 text-right">
-<span class="text-sm text-slate-600">
-Total previsto: <span class="font-bold text-slate-900">{formatBRL(grandTotal)}</span>
+<div class="mt-5 rounded-xl border px-5 py-4 {sobra < 0 ? 'border-red-200 bg-red-50' : 'border-slate-200 bg-slate-50'}">
+<div class="flex items-center justify-end gap-6 text-sm text-slate-600">
+<span>Proventos: <span class="font-bold text-emerald-700">{formatBRL(incomeForecast)}</span></span>
+<span>Total previsto: <span class="font-bold text-slate-900">{formatBRL(grandTotal)}</span></span>
+<span>
+{sobra < 0 ? 'Faltam' : 'Sobra'}:
+<span class="font-bold {sobra < 0 ? 'text-red-600' : 'text-emerald-700'}">{formatBRL(Math.abs(sobra))}</span>
 </span>
+</div>
+{#if sobra < 0}
+<div class="mt-1 text-right text-xs font-semibold text-red-600">⚠ Previsto excede os proventos em {formatBRL(-sobra)} — reduza o orçamento.</div>
+{/if}
 </div>
 </div>
 

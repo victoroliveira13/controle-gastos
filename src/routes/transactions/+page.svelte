@@ -96,8 +96,21 @@
 
 	function navigate(dir: 'prev' | 'next') {
 		const m = dir === 'prev' ? prevMonth(data.ym) : nextMonth(data.ym);
-		goto(`/transactions?month=${m}`);
+		// Mantém filtros (categoria/busca) ao trocar de mês
+		const params = new URLSearchParams({ month: m });
+		for (const id of data.filters.categoryIds) params.append('categoryId', String(id));
+		if (data.filters.search) params.set('q', data.filters.search);
+		goto(`/transactions?${params}`);
 	}
+
+	// Novo lançamento: última data com lançamento no mês; sem lançamentos, hoje (mês atual) ou dia 1
+	const defaultDate = $derived.by(() => {
+		const last = data.rows.reduce<string | null>((max, tx) => (!max || tx.date > max ? tx.date : max), null);
+		if (last) return last;
+		const today = new Date();
+		const todayISO = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+		return todayISO.startsWith(data.ym) ? todayISO : `${data.ym}-01`;
+	});
 
 	const balance = $derived(data.income - data.expense);
 	const finalBalance = $derived(data.previousBalance + balance);
@@ -330,5 +343,6 @@
 	open={modalOpen}
 	categories={data.allCategories as CategoryOption[]}
 	transaction={editing}
+	{defaultDate}
 	onClose={() => (modalOpen = false)}
 />

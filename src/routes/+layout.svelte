@@ -22,6 +22,7 @@
 		{ href: '/dashboard', label: 'Dashboard', icon: '📊' },
 		{ href: '/transactions', label: 'Lançamentos', icon: '💳' },
 		{ href: '/previsto', label: 'Previsto', icon: '🎯' },
+		{ href: '/metas', label: 'Metas', icon: '🏁' },
 		{ href: '/fechamento', label: 'Fechamento', icon: '📋' },
 		{ href: '/import', label: 'Importar', icon: '📥' },
 		{ href: '/categories', label: 'Categorias', icon: '🏷️' },

@@ -2,6 +2,7 @@ import type { PageServerLoad, Actions } from './$types';
 import { db } from '$lib/server/db/index';
 import { budgets, categories, categoryGroups } from '$lib/server/db/schema';
 import { eq, and, inArray } from 'drizzle-orm';
+import { getSetting, setSetting } from '$lib/server/db/settings';
 
 function currentYM() {
 const now = new Date();
@@ -55,7 +56,9 @@ categories: cats
 .map((c) => ({ id: c.id, code: c.code, name: c.name, amount: budgetMap[c.id] ?? 0 }))
 }));
 
-return { ym, groups: result, nextHasBudget };
+const incomeForecast = parseFloat(getSetting(`income_forecast:${ym}`, '0')) || 0;
+
+return { ym, groups: result, nextHasBudget, incomeForecast };
 };
 
 export const actions: Actions = {
@@ -97,6 +100,15 @@ clearGroup: async ({ request, url }) => {
 clearAll: async ({ url }) => {
 	const ym = url.searchParams.get('month') || currentYM();
 	db.delete(budgets).where(eq(budgets.month, ym)).run();
+	setSetting(`income_forecast:${ym}`, '0');
+	return { success: true };
+},
+
+saveIncome: async ({ request, url }) => {
+	const ym = url.searchParams.get('month') || currentYM();
+	const form = await request.formData();
+	const amount = parseFloat(String(form.get('amount') ?? '0').replace(',', '.')) || 0;
+	setSetting(`income_forecast:${ym}`, String(Math.max(amount, 0)));
 	return { success: true };
 },
 

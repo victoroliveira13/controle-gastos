@@ -68,3 +68,17 @@ export const pluggyItems = sqliteTable('pluggy_items', {
 		.notNull()
 		.default(sql`(datetime('now'))`)
 });
+
+// Metas financeiras (reserva, compras, casamento, imóvel...)
+export const goals = sqliteTable('goals', {
+	id: integer('id').primaryKey({ autoIncrement: true }),
+	name: text('name').notNull(),
+	targetAmount: real('target_amount').notNull(),
+	savedAmount: real('saved_amount').notNull().default(0),
+	targetDate: text('target_date'), // YYYY-MM
+	priority: integer('priority').notNull().default(1),
+	notes: text('notes'),
+	createdAt: text('created_at')
+		.notNull()
+		.default(sql`(datetime('now'))`)
+});

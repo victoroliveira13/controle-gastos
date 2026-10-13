@@ -1,7 +1,9 @@
-import type { PageServerLoad } from './$types';
+import type { PageServerLoad, Actions } from './$types';
 import { db } from '$lib/server/db/index';
 import { transactions, categories, categoryGroups, budgets, monthlyNotes } from '$lib/server/db/schema';
-import { eq, and, desc, asc, sql } from 'drizzle-orm';
+import { eq, and, desc, asc, sql, inArray } from 'drizzle-orm';
+import { getInitialBalance } from '$lib/server/db/settings';
+import { buildProjection } from '$lib/server/projection';
 
 function currentYM() {
 	const now = new Date();
@@ -81,7 +83,7 @@ export const load: PageServerLoad = ({ url }) => {
 		.all();
 
 	const allExpenseCats = db
-		.select({ id: categories.id, groupId: categories.groupId })
+		.select({ id: categories.id, groupId: categories.groupId, name: categories.name, isActive: categories.isActive })
 		.from(categories)
 		.innerJoin(categoryGroups, eq(categories.groupId, categoryGroups.id))
 		.where(eq(categoryGroups.isIncome, false))
@@ -103,14 +105,22 @@ export const load: PageServerLoad = ({ url }) => {
 	const budgetMap = Object.fromEntries(monthBudgets.map((b) => [b.groupId, b.total]));
 
 	const budgetVsActual = allExpenseGroups
-		.map((g) => ({
-			groupId: g.id,
-			groupCode: g.code,
-			groupName: g.name,
-			previsto: budgetMap[g.id] ?? 0,
-			realizado: breakdown.find((b) => b.groupCode === g.code)?.total ?? 0,
-			categoryIds: allExpenseCats.filter((c) => c.groupId === g.id).map((c) => c.id)
-		}))
+		.map((g) => {
+			const groupCats = allExpenseCats.filter((c) => c.groupId === g.id);
+			const activeCats = groupCats.filter((c) => c.isActive);
+			// Categoria padrão para cobrir gasto: "Outros" ativa do grupo; senão a primeira ativa
+			const defaultCat = activeCats.find((c) => /^outros/i.test(c.name)) ?? activeCats[0];
+			return {
+				groupId: g.id,
+				groupCode: g.code,
+				groupName: g.name,
+				previsto: budgetMap[g.id] ?? 0,
+				realizado: breakdown.find((b) => b.groupCode === g.code)?.total ?? 0,
+				categoryIds: groupCats.map((c) => c.id),
+				coverCategories: activeCats.map((c) => ({ id: c.id, name: c.name })),
+				defaultCoverCategoryId: defaultCat?.id ?? null
+			};
+		})
 		.filter((b) => b.previsto > 0 || b.realizado > 0);
 
 	const totalPrevisto = budgetVsActual.reduce((s, b) => s + b.previsto, 0);
@@ -123,5 +133,94 @@ export const load: PageServerLoad = ({ url }) => {
 
 	const hasNotes = db.select({ month: monthlyNotes.month }).from(monthlyNotes).where(eq(monthlyNotes.month, ym)).get() != null;
 
-	return { ym, income, expense, breakdown, pieBreakdown, pieFrom, pieTo, months, incomeArr, expenseArr, budgetVsActual, totalPrevisto, totalRealizado, hasNotes };
+	// Saldo em conta: saldo inicial + lançamentos até hoje (mês atual) ou até o último dia do mês selecionado
+	const now = new Date();
+	const todayISO = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+	const [y, m] = ym.split('-').map(Number);
+	const balanceDate =
+		ym === currentYM() ? todayISO : `${ym}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;
+	const net = db
+		.select({
+			total: sql<number>`COALESCE(SUM(CASE WHEN ${transactions.type} = 'income' THEN ${transactions.amount} ELSE -${transactions.amount} END), 0)`
+		})
+		.from(transactions)
+		.where(sql`${transactions.date} <= ${balanceDate}`)
+		.get();
+	const currentBalance = getInitialBalance() + (net?.total ?? 0);
+	const balanceIsToday = balanceDate === todayISO;
+
+	// Projeção até o próximo salário: só faz sentido olhando o mês atual
+	const projection = balanceIsToday ? buildProjection(now) : null;
+
+	return { ym, projection, income, expense, currentBalance, balanceDate, balanceIsToday, breakdown, pieBreakdown, pieFrom, pieTo, months, incomeArr, expenseArr, budgetVsActual, totalPrevisto, totalRealizado, hasNotes };
+};
+
+export const actions: Actions = {
+	// Cobre um gasto: sobe o previsto só pela diferença que falta e lança a despesa
+	cobrir: async ({ request, url }) => {
+		const ym = url.searchParams.get('month') || currentYM();
+		const form = await request.formData();
+		const categoryId = Number(form.get('categoryId'));
+		const amount = Math.round((parseFloat(String(form.get('amount') ?? '0').replace(',', '.')) || 0) * 100) / 100;
+		const description = String(form.get('description') ?? '').trim() || null;
+
+		if (!categoryId || amount <= 0) return { success: false, error: 'Valor inválido' };
+
+		const cat = db.select({ groupId: categories.groupId }).from(categories).where(eq(categories.id, categoryId)).get();
+		if (!cat) return { success: false, error: 'Categoria não encontrada' };
+
+		const groupCatIds = db
+			.select({ id: categories.id })
+			.from(categories)
+			.where(eq(categories.groupId, cat.groupId))
+			.all()
+			.map((c) => c.id);
+
+		const previsto =
+			db
+				.select({ total: sql<number>`COALESCE(SUM(${budgets.amount}), 0)` })
+				.from(budgets)
+				.where(and(eq(budgets.month, ym), inArray(budgets.categoryId, groupCatIds)))
+				.get()?.total ?? 0;
+		const realizado =
+			db
+				.select({ total: sql<number>`COALESCE(SUM(${transactions.amount}), 0)` })
+				.from(transactions)
+				.where(
+					and(
+						eq(transactions.type, 'expense'),
+						inArray(transactions.categoryId, groupCatIds),
+						sql`strftime('%Y-%m', ${transactions.date}) = ${ym}`
+					)
+				)
+				.get()?.total ?? 0;
+
+		// Após lançar, previsto do grupo precisa ser >= realizado
+		const falta = Math.max(Math.round((realizado + amount - previsto) * 100) / 100, 0);
+
+		const now = new Date();
+		const [y, m] = ym.split('-').map(Number);
+		const date =
+			ym === currentYM()
+				? `${ym}-${String(now.getDate()).padStart(2, '0')}`
+				: `${ym}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;
+
+		db.transaction((tx) => {
+			if (falta > 0) {
+				const existing = tx
+					.select({ id: budgets.id, amount: budgets.amount })
+					.from(budgets)
+					.where(and(eq(budgets.categoryId, categoryId), eq(budgets.month, ym)))
+					.get();
+				if (existing) {
+					tx.update(budgets).set({ amount: existing.amount + falta }).where(eq(budgets.id, existing.id)).run();
+				} else {
+					tx.insert(budgets).values({ categoryId, month: ym, amount: falta }).run();
+				}
+			}
+			tx.insert(transactions).values({ categoryId, amount, type: 'expense', date, description }).run();
+		});
+
+		return { success: true, adicionado: falta };
+	}
 };
