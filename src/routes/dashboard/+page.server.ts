@@ -102,6 +102,26 @@ export const load: PageServerLoad = ({ url }) => {
 		.groupBy(categoryGroups.id)
 		.all();
 
+	// Parcelas deste mês já quitadas em outro mês (adiantadas): o previsto não precisa cobri-las de novo
+	const prepaid = db
+		.select({
+			groupId: categoryGroups.id,
+			total: sql<number>`COALESCE(SUM(${transactions.amount}), 0)`
+		})
+		.from(transactions)
+		.innerJoin(categories, eq(transactions.categoryId, categories.id))
+		.innerJoin(categoryGroups, eq(categories.groupId, categoryGroups.id))
+		.where(
+			and(
+				eq(transactions.type, 'expense'),
+				eq(transactions.refMonth, ym),
+				sql`strftime('%Y-%m', ${transactions.date}) != ${ym}`
+			)
+		)
+		.groupBy(categoryGroups.id)
+		.all();
+	const prepaidMap = Object.fromEntries(prepaid.map((p) => [p.groupId, p.total]));
+
 	const budgetMap = Object.fromEntries(monthBudgets.map((b) => [b.groupId, b.total]));
 
 	const budgetVsActual = allExpenseGroups
@@ -114,7 +134,7 @@ export const load: PageServerLoad = ({ url }) => {
 				groupId: g.id,
 				groupCode: g.code,
 				groupName: g.name,
-				previsto: budgetMap[g.id] ?? 0,
+				previsto: Math.max((budgetMap[g.id] ?? 0) - (prepaidMap[g.id] ?? 0), 0),
 				realizado: breakdown.find((b) => b.groupCode === g.code)?.total ?? 0,
 				categoryIds: groupCats.map((c) => c.id),
 				coverCategories: activeCats.map((c) => ({ id: c.id, name: c.name })),
@@ -147,12 +167,21 @@ export const load: PageServerLoad = ({ url }) => {
 		.where(sql`${transactions.date} <= ${balanceDate}`)
 		.get();
 	const currentBalance = getInitialBalance() + (net?.total ?? 0);
+	// Movimento de caixa do mês (por data, não por competência), até a data do saldo
+	const cashNet =
+		db
+			.select({
+				total: sql<number>`COALESCE(SUM(CASE WHEN ${transactions.type} = 'income' THEN ${transactions.amount} ELSE -${transactions.amount} END), 0)`
+			})
+			.from(transactions)
+			.where(sql`strftime('%Y-%m', ${transactions.date}) = ${ym} AND ${transactions.date} <= ${balanceDate}`)
+			.get()?.total ?? 0;
 	const balanceIsToday = balanceDate === todayISO;
 
 	// Projeção até o próximo salário: só faz sentido olhando o mês atual
 	const projection = balanceIsToday ? buildProjection(now) : null;
 
-	return { ym, projection, income, expense, currentBalance, balanceDate, balanceIsToday, breakdown, pieBreakdown, pieFrom, pieTo, months, incomeArr, expenseArr, budgetVsActual, totalPrevisto, totalRealizado, hasNotes };
+	return { ym, projection, income, expense, cashNet, currentBalance, balanceDate, balanceIsToday, breakdown, pieBreakdown, pieFrom, pieTo, months, incomeArr, expenseArr, budgetVsActual, totalPrevisto, totalRealizado, hasNotes };
 };
 
 export const actions: Actions = {

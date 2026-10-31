@@ -25,3 +25,6 @@ vite.config.ts.timestamp-*
 *.db
 # Logs
 *.log
+
+# Backups do banco
+*.db.bak-*

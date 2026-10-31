@@ -35,7 +35,7 @@
 	const cushion = $derived(Number(data.projection?.cushion) > 0 ? Number(data.projection?.cushion) : 300);
 	const sobraPlanejada = $derived(data.income - data.totalPrevisto);
 	// Saldo no 1º dia do mês = saldo atual − (receitas − despesas) já lançadas no mês
-	const saldoInicio = $derived(data.currentBalance - balance);
+	const saldoInicio = $derived(data.currentBalance - data.cashNet);
 	// O que passou do previsto (não compensa com grupos que sobraram)
 	const estouroTotal = $derived(data.expense + totalDisponivel - data.totalPrevisto);
 	const nivel =$derived(
@@ -44,7 +44,30 @@
 	const progressoColchao = $derived(
 		Math.max(0, Math.min(100, (sobraAteSalario / cushion) * 100))
 	);
-	const fatorAjuste = $derived(totalDisponivel > 0 ? saldoLimite / totalDisponivel : 1);
+	// Fluxo de caixa até o próximo salário: saldo após cada evento conhecido
+	const fluxo = $derived.by(() => {
+		const p = data.projection;
+		if (!p) return [];
+		const [y, m] = data.ym.split('-').map(Number);
+		const fimMes = `${data.ym}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;
+		let saldo = data.currentBalance;
+		const pts = [{ label: 'Hoje', date: data.balanceDate, delta: 0, saldo }];
+		if (totalDisponivel > 0) {
+			saldo -= totalDisponivel;
+			pts.push({ label: 'Gastos previstos que faltam no mês', date: fimMes, delta: -totalDisponivel, saldo });
+		}
+		for (const d of p.dues) {
+			saldo -= d.amount;
+			pts.push({ label: d.name, date: d.due, delta: -d.amount, saldo });
+		}
+		if (p.salaryAmount > 0) {
+			saldo += p.salaryAmount;
+			pts.push({ label: 'Salário previsto', date: p.salaryDate, delta: p.salaryAmount, saldo });
+		}
+		return pts;
+	});
+	const primeiroNegativo = $derived(fluxo.find((pt) => pt.saldo < 0));
+	const fatorAjuste =$derived(totalDisponivel > 0 ? saldoLimite / totalDisponivel : 1);
 
 	// Cobrir gasto: lança despesa e sobe o previsto só pela diferença
 	type CoverGroup = (typeof data.budgetVsActual)[number];
@@ -238,6 +261,24 @@
 					<div class="h-full rounded-full {nivel === 'ok' ? 'bg-emerald-500' : nivel === 'atencao' ? 'bg-amber-500' : 'bg-red-500'}" style="width:{progressoColchao}%"></div>
 				</div>
 				<span class="text-xs font-medium text-slate-600">Colchão {fmt(sobraAteSalario)} de {fmt(cushion)}</span>
+				{#if data.projection.dues.length > 0}
+					<div class="mt-3 rounded-lg bg-white/70 px-3 py-2 text-sm ring-1 ring-slate-200">
+						<div class="font-semibold text-slate-800">
+							💰 Separe {fmt(contasAteSalario)} do saldo antes de gastar o resto
+						</div>
+						{#each data.projection.dues as d}
+							<div class="mt-0.5 flex justify-between text-slate-700">
+								<span>{d.name} <span class="text-xs text-slate-500">· vence {fmtDate(d.due)}{d.daysLeft >= 0 ? `, em ${d.daysLeft} dia${d.daysLeft === 1 ? '' : 's'}` : ''}</span></span>
+								<span class="font-medium">{fmt(d.amount)}</span>
+							</div>
+						{/each}
+						{#if saldoVirada < contasAteSalario}
+							<div class="mt-1 text-xs font-medium text-red-600">
+								O saldo na virada ({fmt(saldoVirada)}) não cobre {fmt(contasAteSalario - Math.max(saldoVirada, 0))} dessas contas.
+							</div>
+						{/if}
+					</div>
+				{/if}
 			</div>
 		</div>
 		<div class="grid grid-cols-[1fr_auto] gap-x-6 gap-y-1 px-5 py-3 text-sm">
@@ -260,6 +301,29 @@
 			<span class="border-t border-slate-100 pt-1 font-semibold text-slate-800">= Sobra até o salário</span>
 			<span class="border-t border-slate-100 pt-1 text-right font-bold {sobraAteSalario >= 0 ? 'text-emerald-700' : 'text-red-600'}">{fmt(sobraAteSalario)}</span>
 		</div>
+		{#if fluxo.length > 1}
+			<div class="border-t border-slate-100 px-5 py-3">
+				<div class="mb-1 flex items-center justify-between text-xs font-semibold tracking-wide text-slate-500 uppercase">
+					<span>Fluxo de caixa até o salário</span>
+					{#if primeiroNegativo}
+						<span class="font-semibold text-red-600 normal-case">⚠ conta negativa em {fmtDate(primeiroNegativo.date)}</span>
+					{:else}
+						<span class="font-semibold text-emerald-600 normal-case">sem saldo negativo</span>
+					{/if}
+				</div>
+				<div class="grid grid-cols-[auto_1fr_auto_auto] items-center gap-x-4 gap-y-0.5 text-sm">
+					{#each fluxo as pt}
+						<span class="text-xs text-slate-400">{fmtDate(pt.date)}</span>
+						<span class="text-slate-600">{pt.label}</span>
+						<span class="text-right text-xs {pt.delta < 0 ? 'text-red-500' : 'text-emerald-600'}">{pt.delta === 0 ? '' : fmt(pt.delta)}</span>
+						<span class="w-28 text-right font-medium {pt.saldo < 0 ? 'text-red-600' : 'text-slate-800'}">{fmt(pt.saldo)}</span>
+					{/each}
+				</div>
+				{#if !data.projection?.salaryAmount}
+					<div class="mt-1 text-xs text-slate-400">Cadastre o salário em Configurações para ver quando a conta volta ao positivo.</div>
+				{/if}
+			</div>
+		{/if}
 	</div>
 	{/if}
 

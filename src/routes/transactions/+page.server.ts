@@ -10,6 +10,14 @@ function currentYM() {
 	return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 }
 
+// Mês de competência só é gravado quando difere do mês da data (parcela adiantada).
+function parseCompetence(fd: FormData, date: string) {
+	const raw = String(fd.get('refMonth') ?? '').trim();
+	const refMonth = /^\d{4}-\d{2}$/.test(raw) && raw !== date.slice(0, 7) ? raw : null;
+	const discount = Math.max(parseFloat(String(fd.get('discount') ?? '0')) || 0, 0);
+	return { refMonth, discount };
+}
+
 export const load: PageServerLoad = ({ url }) => {
 	const ym = url.searchParams.get('month') || currentYM();
 	const categoryIds = url.searchParams.getAll('categoryId').map(Number).filter(Boolean);
@@ -26,6 +34,8 @@ export const load: PageServerLoad = ({ url }) => {
 			type: transactions.type,
 			date: transactions.date,
 			description: transactions.description,
+			refMonth: transactions.refMonth,
+			discount: transactions.discount,
 			categoryId: transactions.categoryId,
 			categoryName: categories.name,
 			categoryCode: categories.code,
@@ -81,7 +91,15 @@ export const load: PageServerLoad = ({ url }) => {
 	const prevExpense = prevSummary.find((r) => r.type === 'expense')?.total ?? 0;
 	const previousBalance = getInitialBalance() + prevIncome - prevExpense;
 
+	const discountYear =
+		db
+			.select({ total: sql<number>`COALESCE(SUM(${transactions.discount}), 0)` })
+			.from(transactions)
+			.where(sql`strftime('%Y', ${transactions.date}) = ${ym.slice(0, 4)}`)
+			.get()?.total ?? 0;
+
 	return {
+		discountYear,
 		rows,
 		allCategories,
 		ym,
@@ -100,12 +118,13 @@ export const actions: Actions = {
 		const date = fd.get('date') as string;
 		const categoryId = Number(fd.get('categoryId'));
 		const description = (fd.get('description') as string) || null;
+		const { refMonth, discount } = parseCompetence(fd, date);
 
 		if (!amount || amount <= 0) return fail(400, { error: 'Valor inválido' });
 		if (!date) return fail(400, { error: 'Data obrigatória' });
 		if (!categoryId) return fail(400, { error: 'Categoria obrigatória' });
 
-		db.insert(transactions).values({ amount, type, date, categoryId, description }).run();
+		db.insert(transactions).values({ amount, type, date, categoryId, description, refMonth, discount }).run();
 		return { success: true };
 	},
 
@@ -117,11 +136,12 @@ export const actions: Actions = {
 		const date = fd.get('date') as string;
 		const categoryId = Number(fd.get('categoryId'));
 		const description = (fd.get('description') as string) || null;
+		const { refMonth, discount } = parseCompetence(fd, date);
 
 		if (!id) return fail(400, { error: 'ID inválido' });
 
 		db.update(transactions)
-			.set({ amount, type, date, categoryId, description })
+			.set({ amount, type, date, categoryId, description, refMonth, discount })
 			.where(eq(transactions.id, id))
 			.run();
 		return { success: true };

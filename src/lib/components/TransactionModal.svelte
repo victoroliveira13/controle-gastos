@@ -18,6 +18,8 @@
 		date: string;
 		description: string | null;
 		categoryId: number;
+		refMonth?: string | null;
+		discount?: number;
 	}
 
 	interface Props {
@@ -183,6 +185,39 @@
 					placeholder="Ex: Conta do mês"
 					class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
 				/>
+			</div>
+
+			<!-- Competência e desconto (parcela adiantada) -->
+			<div class="grid grid-cols-2 gap-3">
+				<div>
+					<label for="refMonth" class="mb-1.5 block text-sm font-medium text-gray-700"
+						>Parcela de <span class="text-gray-400">(opcional)</span></label
+					>
+					<input
+						id="refMonth"
+						name="refMonth"
+						type="month"
+						value={transaction?.refMonth ?? ''}
+						class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+					/>
+					<p class="mt-1 text-xs text-gray-400">Mês da parcela quitada (adiantada ou amortizada). O gasto continua no mês do pagamento.</p>
+				</div>
+				<div>
+					<label for="discount" class="mb-1.5 block text-sm font-medium text-gray-700"
+						>Desconto (R$) <span class="text-gray-400">(opcional)</span></label
+					>
+					<input
+						id="discount"
+						name="discount"
+						type="number"
+						min="0"
+						step="0.01"
+						value={transaction?.discount ? transaction.discount : ''}
+						placeholder="0,00"
+						class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+					/>
+					<p class="mt-1 text-xs text-gray-400">Já descontado do valor pago.</p>
+				</div>
 			</div>
 		</div>
 

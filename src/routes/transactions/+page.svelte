@@ -85,7 +85,9 @@
 			type: tx.type as 'income' | 'expense',
 			date: tx.date,
 			description: tx.description,
-			categoryId: tx.categoryId
+			categoryId: tx.categoryId,
+			refMonth: tx.refMonth,
+			discount: tx.discount
 		};
 		modalOpen = true;
 	}
@@ -145,6 +147,11 @@
 			<button onclick={() => navigate('next')} class="rounded-lg border border-slate-200 px-3 py-1.5 text-sm hover:bg-slate-50">→</button>
 		</div>
 		<div class="ml-auto flex items-center gap-4 text-sm">
+			{#if data.discountYear > 0}
+				<span class="rounded bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700" title="Soma dos descontos por antecipação lançados no ano">
+					economizado em {data.ym.slice(0, 4)}: {fmt(data.discountYear)}
+				</span>
+			{/if}
 			<span class="font-medium text-emerald-600">↑ {fmt(data.income)}</span>
 			<span class="font-medium text-red-600">↓ {fmt(data.expense)}</span>
 			<span class="font-semibold {balance >= 0 ? 'text-emerald-700' : 'text-red-700'}">= {fmt(balance)}</span>
@@ -287,7 +294,15 @@
 						<tr class="hover:bg-slate-50/50">
 							<td class="px-3 py-3 text-center text-xs font-medium text-slate-400">{i + 1}</td>
 							<td class="px-5 py-3 text-slate-500">{tx.date.split('-').reverse().join('/')}</td>
-							<td class="px-5 py-3 text-slate-800">{tx.description ?? '—'}</td>
+							<td class="px-5 py-3 text-slate-800">
+							{tx.description ?? '—'}
+							{#if tx.refMonth}
+								<span class="ml-1 rounded bg-indigo-50 px-1.5 py-0.5 text-xs font-medium text-indigo-700" title="Parcela quitada de outro mês">parcela {monthLabel(tx.refMonth)}</span>
+							{/if}
+							{#if tx.discount > 0}
+								<span class="ml-1 rounded bg-emerald-50 px-1.5 py-0.5 text-xs font-medium text-emerald-700" title="Desconto por antecipação">−{fmt(tx.discount)}</span>
+							{/if}
+						</td>
 							<td class="px-5 py-3">
 								<span
 									class="rounded-full px-2 py-0.5 text-xs font-medium"

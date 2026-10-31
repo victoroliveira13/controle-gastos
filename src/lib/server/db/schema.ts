@@ -54,6 +54,10 @@ export const transactions = sqliteTable('transactions', {
 	type: text('type', { enum: ['income', 'expense'] }).notNull(),
 	date: text('date').notNull(), // YYYY-MM-DD
 	description: text('description'),
+	// Parcela quitada (YYYY-MM), quando difere do mês do pagamento (adiantamento/amortização). Não move o gasto de mês.
+	refMonth: text('ref_month'),
+	// Desconto obtido por pagar antes do vencimento (R$). Informativo: amount já é o valor pago.
+	discount: real('discount').notNull().default(0),
 	pluggyTxId: text('pluggy_tx_id'), // Pluggy transaction ID for deduplication
 	createdAt: text('created_at')
 		.notNull()
@@ -82,3 +86,4 @@ export const goals = sqliteTable('goals', {
 		.notNull()
 		.default(sql`(datetime('now'))`)
 });
+

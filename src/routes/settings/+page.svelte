@@ -52,6 +52,43 @@
 
 		<!-- Saldo inicial -->
 		<div class="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+			<h2 class="mb-1 text-base font-semibold text-slate-800">🗓 Salário previsto</h2>
+			<p class="mb-4 text-sm text-slate-500">
+				Usado na projeção do dashboard: mostra quando o saldo volta ao positivo e se a conta fica negativa antes do salário.
+			</p>
+			<form
+				method="POST"
+				action="?/saveSalary"
+				use:enhance={() =>
+					async ({ update }) => {
+						await update({ reset: false });
+						saved = true;
+						setTimeout(() => (saved = false), 3000);
+					}}
+				class="grid grid-cols-3 items-end gap-3"
+			>
+				<label class="text-sm text-slate-600">
+					Valor líquido (R$)
+					<input name="salaryAmount" type="number" min="0" step="0.01" value={data.salary.amount || ''} placeholder="0,00"
+						class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none" />
+				</label>
+				<label class="text-sm text-slate-600">
+					Dia útil do pagamento
+					<input name="salaryBusinessDay" type="number" min="1" max="23" step="1" value={data.salary.businessDay}
+						class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none" />
+				</label>
+				<label class="text-sm text-slate-600">
+					Colchão mínimo (R$)
+					<input name="cushion" type="number" min="0" step="10" value={data.salary.cushion}
+						class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none" />
+				</label>
+				<button type="submit" class="col-span-3 justify-self-end rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">
+					Salvar
+				</button>
+			</form>
+		</div>
+
+		<div class="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
 			<h2 class="mb-1 text-base font-semibold text-slate-800">💰 Saldo inicial</h2>
 			<p class="mb-4 text-sm text-slate-500">
 				Valor em conta antes do primeiro lançamento registrado no sistema. Será somado ao saldo acumulado em todos os meses.

@@ -1,6 +1,6 @@
 import { db } from './db/index';
-import { budgets, categories } from './db/schema';
-import { and, eq } from 'drizzle-orm';
+import { budgets, categories, transactions } from './db/schema';
+import { and, eq, like } from 'drizzle-orm';
 import { getSetting } from './db/settings';
 
 export type Commitment = { code: string; name: string; day: number };
@@ -51,14 +51,57 @@ export function nextSalaryDate(today: Date, n: number): Date {
 	return nthBusinessDay(today.getFullYear(), today.getMonth() + 2, n);
 }
 
-function budgetFor(code: string, ym: string): number {
+const MONTH_ABBR = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+
+/** Rótulos aceitos na descrição para indicar o mês pago: "nov/26", "nov/2026", "11/26", "11/2026". */
+export function monthLabels(ym: string): string[] {
+	const [y, m] = ym.split('-');
+	const yy = y.slice(2);
+	return [`${MONTH_ABBR[Number(m) - 1]}/${yy}`, `${MONTH_ABBR[Number(m) - 1]}/${y}`, `${m}/${yy}`, `${m}/${y}`];
+}
+
+/** Parcela adiantada: despesa da categoria cuja descrição cita o mês do vencimento (ex.: "nov/26"). */
+function paidAhead(code: string, ym: string): boolean {
+	const byRefMonth =
+		db
+			.select({ id: transactions.id })
+			.from(transactions)
+			.innerJoin(categories, eq(transactions.categoryId, categories.id))
+			.where(
+				and(
+					eq(categories.code, code),
+					eq(transactions.type, 'expense'),
+					eq(transactions.refMonth, ym)
+				)
+			)
+			.get() != null;
+	if (byRefMonth) return true;
+	return monthLabels(ym).some(
+		(label) =>
+			db
+				.select({ id: transactions.id })
+				.from(transactions)
+				.innerJoin(categories, eq(transactions.categoryId, categories.id))
+				.where(
+					and(
+						eq(categories.code, code),
+						eq(transactions.type, 'expense'),
+						like(transactions.description, `%${label}%`)
+					)
+				)
+				.get() != null
+	);
+}
+
+/** null = sem previsto cadastrado no mês; 0 = cadastrado como zero (ex.: já pago adiantado). */
+function budgetFor(code: string, ym: string): number | null {
 	return (
 		db
 			.select({ amount: budgets.amount })
 			.from(budgets)
 			.innerJoin(categories, eq(budgets.categoryId, categories.id))
 			.where(and(eq(categories.code, code), eq(budgets.month, ym)))
-			.get()?.amount ?? 0
+			.get()?.amount ?? null
 	);
 }
 
@@ -78,9 +121,17 @@ export function buildProjection(today: Date) {
 	const dues = getCommitments()
 		.map((c) => {
 			const dueISO = `${nextYM}-${String(c.day).padStart(2, '0')}`;
-			// usa o previsto do mês seguinte; se ainda não existe, repete o do mês atual
-			const amount = budgetFor(c.code, nextYM) || budgetFor(c.code, currentYM);
-			return { name: c.name, due: dueISO, amount };
+			// usa o previsto do mês seguinte; só repete o do mês atual se o do seguinte não existe.
+			// Previsto zerado no mês seguinte = conta já paga adiantada, não entra na projeção.
+			const amount = paidAhead(c.code, nextYM)
+				? 0
+				: (budgetFor(c.code, nextYM) ?? budgetFor(c.code, currentYM) ?? 0);
+			const daysLeft = Math.round(
+				(new Date(`${dueISO}T00:00:00`).getTime() -
+					new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime()) /
+					86400000
+			);
+			return { name: c.name, due: dueISO, amount, daysLeft };
 		})
 		.filter((c) => c.due > monthEnd && c.due <= salaryISO && c.amount > 0)
 		.sort((a, b) => a.due.localeCompare(b.due));
@@ -88,5 +139,7 @@ export function buildProjection(today: Date) {
 	// colchão: sobra mínima desejada depois de pagar tudo até o salário
 	const cushion = parseFloat(getSetting('cushion_target', '300')) || 300;
 
-	return { salaryDate: salaryISO, dues, cushion };
+	const salaryAmount = parseFloat(getSetting('salary_amount', '0')) || 0;
+
+	return { salaryDate: salaryISO, dues, cushion, salaryAmount };
 }

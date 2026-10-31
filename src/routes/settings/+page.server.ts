@@ -28,6 +28,11 @@ export const load: PageServerLoad = () => {
 
 	return {
 		initialBalance: getInitialBalance(),
+		salary: {
+			amount: parseFloat(getSetting('salary_amount', '0')) || 0,
+			businessDay: parseInt(getSetting('salary_business_day', '5'), 10) || 5,
+			cushion: parseFloat(getSetting('cushion_target', '300')) || 300
+		},
 		pluggy: {
 			clientId: getSetting('pluggy_client_id', ''),
 			clientSecret: getSetting('pluggy_client_secret', ''),
@@ -50,6 +55,18 @@ export const actions: Actions = {
 		const value = parseFloat(raw.replace(',', '.'));
 		if (isNaN(value)) return fail(400, { error: 'Valor inválido' });
 		setSetting('initial_balance', value.toString());
+		return { success: true };
+	},
+
+	saveSalary: async ({ request }) => {
+		const fd = await request.formData();
+		const amount = parseFloat(String(fd.get('salaryAmount') ?? '0').replace(',', '.')) || 0;
+		const day = parseInt(String(fd.get('salaryBusinessDay') ?? '5'), 10);
+		const cushion = parseFloat(String(fd.get('cushion') ?? '300').replace(',', '.'));
+		if (amount < 0 || !(day >= 1 && day <= 23) || !(cushion >= 0)) return fail(400, { error: 'Valores inválidos' });
+		setSetting('salary_amount', amount.toString());
+		setSetting('salary_business_day', day.toString());
+		setSetting('cushion_target', cushion.toString());
 		return { success: true };
 	},
 
