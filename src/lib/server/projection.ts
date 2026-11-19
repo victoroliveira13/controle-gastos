@@ -136,10 +136,8 @@ export function buildProjection(today: Date) {
 		.filter((c) => c.due > monthEnd && c.due <= salaryISO && c.amount > 0)
 		.sort((a, b) => a.due.localeCompare(b.due));
 
-	// colchão: sobra mínima desejada depois de pagar tudo até o salário
-	const cushion = parseFloat(getSetting('cushion_target', '300')) || 300;
+	// receita prevista (Previsto) do mês em que o salário cai
+	const salaryAmount = parseFloat(getSetting(`income_forecast:${salaryISO.slice(0, 7)}`, '0')) || 0;
 
-	const salaryAmount = parseFloat(getSetting('salary_amount', '0')) || 0;
-
-	return { salaryDate: salaryISO, dues, cushion, salaryAmount };
+	return { salaryDate: salaryISO, dues, salaryAmount };
 }

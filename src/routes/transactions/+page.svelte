@@ -125,6 +125,35 @@
 			return { ...tx, runningBalance: running };
 		});
 	});
+
+	// Ordenação por coluna; o saldo continua sendo o acumulado em ordem cronológica
+	type SortKey = 'date' | 'description' | 'category' | 'amount';
+	let sortKey = $state<SortKey>('date');
+	let sortDir = $state<1 | -1>(1);
+
+	function toggleSort(key: SortKey) {
+		if (sortKey === key) sortDir = sortDir === 1 ? -1 : 1;
+		else {
+			sortKey = key;
+			sortDir = 1;
+		}
+	}
+
+	const sortedRows = $derived.by(() => {
+		const val = (tx: (typeof rowsWithBalance)[number]) =>
+			sortKey === 'description' ? (tx.description ?? '')
+			: sortKey === 'category' ? `${tx.categoryCode} ${tx.categoryName}`
+			: sortKey === 'amount' ? (tx.type === 'income' ? tx.amount : -tx.amount)
+			: tx.date;
+		return rowsWithBalance
+			.map((tx, idx) => ({ tx, idx }))
+			.sort((a, b) => {
+				const va = val(a.tx), vb = val(b.tx);
+				const c = typeof va === 'number' ? va - (vb as number) : (va as string).localeCompare(vb as string, 'pt-BR', { numeric: true });
+				return c * sortDir || a.idx - b.idx;
+			})
+			.map(({ tx }) => tx);
+	});
 </script>
 
 <div class="p-8">
@@ -267,10 +296,13 @@
 				<thead class="bg-slate-50 text-xs font-medium uppercase tracking-wide text-slate-500">
 					<tr>
 						<th class="px-3 py-3 text-center">#</th>
-						<th class="px-5 py-3 text-left">Data</th>
-						<th class="px-5 py-3 text-left">Descrição</th>
-						<th class="px-5 py-3 text-left">Categoria</th>
-						<th class="px-5 py-3 text-right">Valor</th>
+						{#each [['date', 'Data', 'text-left'], ['description', 'Descrição', 'text-left'], ['category', 'Categoria', 'text-left'], ['amount', 'Valor', 'text-right']] as [key, label, align]}
+							<th class="px-5 py-3 {align}" aria-sort={sortKey === key ? (sortDir === 1 ? 'ascending' : 'descending') : 'none'}>
+								<button type="button" onclick={() => toggleSort(key as SortKey)} class="uppercase tracking-wide hover:text-slate-800">
+									{label}{sortKey === key ? (sortDir === 1 ? ' ▲' : ' ▼') : ''}
+								</button>
+							</th>
+						{/each}
 						<th class="px-5 py-3 text-right">Saldo</th>
 						<th class="px-5 py-3"></th>
 					</tr>
@@ -290,7 +322,7 @@
 							<td class="px-5 py-2.5"></td>
 						</tr>
 					{/if}
-					{#each rowsWithBalance as tx, i}
+					{#each sortedRows as tx, i}
 						<tr class="hover:bg-slate-50/50">
 							<td class="px-3 py-3 text-center text-xs font-medium text-slate-400">{i + 1}</td>
 							<td class="px-5 py-3 text-slate-500">{tx.date.split('-').reverse().join('/')}</td>

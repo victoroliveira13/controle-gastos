@@ -22,7 +22,7 @@
 
 <svelte:window />
 
-<div class="p-8">
+<div class="px-8 pt-6 pb-8">
 	<div class="mb-6 flex items-center justify-between">
 		<h1 class="text-2xl font-bold text-slate-900">Categorias</h1>
 		<button

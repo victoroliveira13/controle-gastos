@@ -1,8 +1,8 @@
 import type { PageServerLoad, Actions } from './$types';
 import { db } from '$lib/server/db/index';
-import { transactions, categories, categoryGroups, budgets, monthlyNotes } from '$lib/server/db/schema';
+import { transactions, categories, categoryGroups, budgets } from '$lib/server/db/schema';
 import { eq, and, desc, asc, sql, inArray } from 'drizzle-orm';
-import { getInitialBalance } from '$lib/server/db/settings';
+import { getInitialBalance, getSetting } from '$lib/server/db/settings';
 import { buildProjection } from '$lib/server/projection';
 
 function currentYM() {
@@ -102,8 +102,8 @@ export const load: PageServerLoad = ({ url }) => {
 		.groupBy(categoryGroups.id)
 		.all();
 
-	// Parcelas deste mês já quitadas em outro mês (adiantadas): o previsto não precisa cobri-las de novo
-	const prepaid = db
+	// Realizado: despesas datadas no mês (parcelas pagas antes ficam fora)
+	const competenceSpent = db
 		.select({
 			groupId: categoryGroups.id,
 			total: sql<number>`COALESCE(SUM(${transactions.amount}), 0)`
@@ -114,13 +114,12 @@ export const load: PageServerLoad = ({ url }) => {
 		.where(
 			and(
 				eq(transactions.type, 'expense'),
-				eq(transactions.refMonth, ym),
-				sql`strftime('%Y-%m', ${transactions.date}) != ${ym}`
+				sql`strftime('%Y-%m', ${transactions.date}) = ${ym}`
 			)
 		)
 		.groupBy(categoryGroups.id)
 		.all();
-	const prepaidMap = Object.fromEntries(prepaid.map((p) => [p.groupId, p.total]));
+	const spentMap = Object.fromEntries(competenceSpent.map((p) => [p.groupId, p.total]));
 
 	const budgetMap = Object.fromEntries(monthBudgets.map((b) => [b.groupId, b.total]));
 
@@ -134,8 +133,8 @@ export const load: PageServerLoad = ({ url }) => {
 				groupId: g.id,
 				groupCode: g.code,
 				groupName: g.name,
-				previsto: Math.max((budgetMap[g.id] ?? 0) - (prepaidMap[g.id] ?? 0), 0),
-				realizado: breakdown.find((b) => b.groupCode === g.code)?.total ?? 0,
+				previsto: budgetMap[g.id] ?? 0,
+				realizado: spentMap[g.id] ?? 0,
 				categoryIds: groupCats.map((c) => c.id),
 				coverCategories: activeCats.map((c) => ({ id: c.id, name: c.name })),
 				defaultCoverCategoryId: defaultCat?.id ?? null
@@ -150,8 +149,6 @@ export const load: PageServerLoad = ({ url }) => {
 	const months = [...new Set(evolutionRaw.map((r) => r.month))].sort();
 	const incomeArr = months.map((key) => evolutionRaw.find((r) => r.month === key && r.type === 'income')?.total ?? 0);
 	const expenseArr = months.map((key) => evolutionRaw.find((r) => r.month === key && r.type === 'expense')?.total ?? 0);
-
-	const hasNotes = db.select({ month: monthlyNotes.month }).from(monthlyNotes).where(eq(monthlyNotes.month, ym)).get() != null;
 
 	// Saldo em conta: saldo inicial + lançamentos até hoje (mês atual) ou até o último dia do mês selecionado
 	const now = new Date();
@@ -181,7 +178,32 @@ export const load: PageServerLoad = ({ url }) => {
 	// Projeção até o próximo salário: só faz sentido olhando o mês atual
 	const projection = balanceIsToday ? buildProjection(now) : null;
 
-	return { ym, projection, income, expense, cashNet, currentBalance, balanceDate, balanceIsToday, breakdown, pieBreakdown, pieFrom, pieTo, months, incomeArr, expenseArr, budgetVsActual, totalPrevisto, totalRealizado, hasNotes };
+	const incomeForecast = parseFloat(getSetting(`income_forecast:${ym}`, '0')) || 0;
+
+	// Despesas do ano por grupo e mês, para o filtro do gráfico de evolução
+	const yearSpent = db
+		.select({
+			groupId: categoryGroups.id,
+			groupCode: categoryGroups.code,
+			groupName: categoryGroups.name,
+			month: sql<string>`strftime('%Y-%m', ${transactions.date})`,
+			total: sql<number>`COALESCE(SUM(${transactions.amount}), 0)`
+		})
+		.from(transactions)
+		.innerJoin(categories, eq(transactions.categoryId, categories.id))
+		.innerJoin(categoryGroups, eq(categories.groupId, categoryGroups.id))
+		.where(and(eq(transactions.type, 'expense'), sql`strftime('%Y', ${transactions.date}) = ${ym.slice(0, 4)}`))
+		.groupBy(categoryGroups.id, sql`strftime('%Y-%m', ${transactions.date})`)
+		.all();
+	const groupOptions = [...new Map(yearSpent.map((r) => [r.groupCode, { code: r.groupCode, name: r.groupName }])).values()].sort(
+		(a, b) => a.name.localeCompare(b.name, 'pt-BR')
+	);
+	const expenseByGroup: Record<string, Record<string, number>> = {};
+	for (const r of yearSpent) {
+		(expenseByGroup[r.groupCode] ??= {})[r.month] = r.total;
+	}
+
+	return { ym, projection, income, expense, incomeForecast, groupOptions, expenseByGroup,cashNet, currentBalance, balanceDate, balanceIsToday, breakdown, pieBreakdown, pieFrom, pieTo, months, incomeArr, expenseArr, budgetVsActual, totalPrevisto, totalRealizado };
 };
 
 export const actions: Actions = {

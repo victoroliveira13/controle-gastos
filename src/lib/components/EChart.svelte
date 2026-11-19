@@ -2,27 +2,44 @@
 	import { onMount } from 'svelte';
 	import type * as echarts from 'echarts';
 
+	interface ZoomRange {
+		start: number;
+		end: number;
+		startValue?: number;
+		endValue?: number;
+	}
+
 	interface Props {
 		option: echarts.EChartsOption;
 		height?: string;
+		onzoom?: (range: ZoomRange) => void;
 	}
 
-	let { option, height = '300px' }: Props = $props();
+	let { option, height = '300px', onzoom }: Props = $props();
 
 	let container: HTMLDivElement;
-	let chart: echarts.ECharts;
+	let chart: echarts.ECharts | undefined;
 
-	onMount(async () => {
-		const ec = await import('echarts');
-		chart = ec.init(container, null, { renderer: 'canvas' });
-		chart.setOption(option);
-
-		const ro = new ResizeObserver(() => chart.resize());
-		ro.observe(container);
+	// onMount async não executa o cleanup retornado: inicializa aqui e descarta ao desmontar
+	onMount(() => {
+		let disposed = false;
+		let ro: ResizeObserver | undefined;
+		import('echarts').then((ec) => {
+			if (disposed) return;
+			chart = ec.init(container, null, { renderer: 'canvas' });
+			chart.setOption(option);
+			chart.on('datazoom', (e) => {
+				const range = (e as unknown as { batch?: ZoomRange[] }).batch?.[0];
+				if (range) onzoom?.(range);
+			});
+			ro = new ResizeObserver(() => chart?.resize());
+			ro.observe(container);
+		});
 
 		return () => {
-			ro.disconnect();
-			chart.dispose();
+			disposed = true;
+			ro?.disconnect();
+			chart?.dispose();
 		};
 	});
 

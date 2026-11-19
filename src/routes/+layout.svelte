@@ -24,9 +24,6 @@
 		{ href: '/transactions', label: 'Lançamentos' },
 		{ href: '/previsto', label: 'Previsto' },
 		{ href: '/metas', label: 'Metas' },
-		{ href: '/fechamento', label: 'Fechamento' },
-		{ href: '/import', label: 'Importar' },
-		{ href: '/categories', label: 'Categorias' },
 		{ href: '/settings', label: 'Configurações' }
 	];
 </script>

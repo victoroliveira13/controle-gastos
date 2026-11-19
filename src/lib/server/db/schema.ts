@@ -58,16 +58,6 @@ export const transactions = sqliteTable('transactions', {
 	refMonth: text('ref_month'),
 	// Desconto obtido por pagar antes do vencimento (R$). Informativo: amount já é o valor pago.
 	discount: real('discount').notNull().default(0),
-	pluggyTxId: text('pluggy_tx_id'), // Pluggy transaction ID for deduplication
-	createdAt: text('created_at')
-		.notNull()
-		.default(sql`(datetime('now'))`)
-});
-
-// Pluggy connected bank items (persisted after user connects via widget)
-export const pluggyItems = sqliteTable('pluggy_items', {
-	id: text('id').primaryKey(), // Pluggy item ID
-	name: text('name').notNull().default('Banco'), // institution name
 	createdAt: text('created_at')
 		.notNull()
 		.default(sql`(datetime('now'))`)

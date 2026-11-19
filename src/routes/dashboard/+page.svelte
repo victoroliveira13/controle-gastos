@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { EChartsOption, SeriesOption } from 'echarts';
 	import EChart from '$lib/components/EChart.svelte';
 	import { formatBRL, monthLabel, prevMonth, nextMonth, GROUP_COLORS } from '$lib/utils/format';
 	import { goto, invalidateAll } from '$app/navigation';
@@ -24,7 +25,7 @@
 	const sobraAteSalario = $derived(saldoVirada - contasAteSalario);
 	// Menor grupo cujo "disponível" sozinho cobre a falta
 	const dicaCorte = $derived.by(() => {
-		const falta = cushion - sobraAteSalario;
+		const falta = -sobraAteSalario;
 		if (falta <= 0) return '';
 		const g = data.budgetVsActual
 			.filter((b) => b.previsto - b.realizado >= falta)
@@ -32,18 +33,12 @@
 		return g ? g.groupName : '';
 	});
 	const fmtDate = (iso: string) => iso.split('-').reverse().slice(0, 2).join('/');
-	const cushion = $derived(Number(data.projection?.cushion) > 0 ? Number(data.projection?.cushion) : 300);
 	const sobraPlanejada = $derived(data.income - data.totalPrevisto);
 	// Saldo no 1º dia do mês = saldo atual − (receitas − despesas) já lançadas no mês
 	const saldoInicio = $derived(data.currentBalance - data.cashNet);
 	// O que passou do previsto (não compensa com grupos que sobraram)
-	const estouroTotal = $derived(data.expense + totalDisponivel - data.totalPrevisto);
-	const nivel =$derived(
-		sobraAteSalario < 0 ? 'falta' : sobraAteSalario < cushion ? 'atencao' : 'ok'
-	);
-	const progressoColchao = $derived(
-		Math.max(0, Math.min(100, (sobraAteSalario / cushion) * 100))
-	);
+	const estouroTotal = $derived(data.totalRealizado + totalDisponivel - data.totalPrevisto);
+	const nivel = $derived(sobraAteSalario < 0 ? 'falta' : 'ok');
 	// Fluxo de caixa até o próximo salário: saldo após cada evento conhecido
 	const fluxo = $derived.by(() => {
 		const p = data.projection;
@@ -140,24 +135,129 @@
 		await invalidateAll();
 	}
 
-	const evolutionOption = $derived({
-		tooltip: { trigger: 'axis', valueFormatter: (v: number) => formatBRL(v) },
-		legend: { data: ['Receitas', 'Despesas'], bottom: 0 },
+	// média acumulada até cada mês, a partir do primeiro mês com valor
+	const runningAvg = (arr: number[]) => {
+		const start = arr.findIndex((v) => v !== 0);
+		let sum = 0;
+		return arr.map((v, i) =>
+			start === -1 || i < start ? null : Math.round(((sum += v) / (i - start + 1)) * 100) / 100
+		);
+	};
+
+	// Despesa prevista do mês = já gasto + o que ainda falta gastar do planejado
+	// Filtro do gráfico de evolução: 'todos' ou o código de um grupo
+	let evoGroup = $state('todos');
+	const evoGrupo = $derived(data.budgetVsActual.find((b) => b.groupCode === evoGroup) ?? null);
+	const evoGastoMes = $derived(evoGroup === 'todos' ? data.expense : (data.expenseByGroup[evoGroup]?.[data.ym] ?? 0));
+	const evoExpenseArr = $derived(
+		evoGroup === 'todos' ? data.expenseArr : data.months.map((m) => data.expenseByGroup[evoGroup]?.[m] ?? 0)
+	);
+	const despesaPrevista = $derived(
+		evoGroup === 'todos'
+			? data.totalRealizado + totalDisponivel
+			: Math.max(evoGrupo?.previsto ?? 0, evoGrupo?.realizado ?? 0)
+	);
+	// Só a parte que falta, empilhada sobre a barra de despesas do mês selecionado
+	const faltaPrevistaArr = $derived(
+		data.months.map((m) => (m === data.ym ? Math.max(despesaPrevista - evoGastoMes, 0) : null))
+	);
+
+	// Receita prevista do mês = o que foi provisionado em Previsto; só a parte que falta entra empilhada
+	const receitaPrevista = $derived(Math.max(data.incomeForecast, data.income));
+	const faltaReceitaArr = $derived(
+		data.months.map((m) => (m === data.ym ? Math.max(data.incomeForecast - data.income, 0) : null))
+	);
+
+	// Zoom do gráfico: meses visíveis (índices em data.months). null = sem zoom aplicado
+	let evoZoom = $state<{ from: number; to: number } | null>(null);
+	$effect(() => {
+		evoGroup;
+		data;
+		evoZoom = null;
+	});
+	function onEvoZoom(z: { start: number; end: number; startValue?: number; endValue?: number }) {
+		if (z.startValue != null && z.endValue != null) {
+			evoZoom = { from: z.startValue, to: z.endValue };
+		} else {
+			const n = data.months.length;
+			const from = Math.floor((z.start / 100) * n);
+			evoZoom = { from, to: Math.max(from, Math.ceil((z.end / 100) * n) - 1) };
+		}
+	}
+	// Total do grupo: no ano do mês selecionado, ou nos meses visíveis quando há zoom
+	const evoTotal = $derived(
+		evoZoom
+			? evoExpenseArr.slice(evoZoom.from, evoZoom.to + 1).reduce((s, v) => s + v, 0)
+			: Object.entries(data.expenseByGroup[evoGroup] ?? {})
+					.filter(([m]) => m.startsWith(data.ym.slice(0, 4)))
+					.reduce((s, [, v]) => s + v, 0)
+	);
+	const evoTotalLabel = $derived(
+		evoZoom ? `nos ${evoZoom.to - evoZoom.from + 1} meses visíveis` : `no ano ${data.ym.slice(0, 4)}`
+	);
+
+	// Receita só aparece sem filtro de grupo
+	const mostraReceita = $derived(evoGroup === 'todos');
+	const seriesReceita = ['Receitas', 'Receita prevista', 'Média receitas'];
+
+	const evolutionOption = $derived<EChartsOption>({
+		tooltip: { trigger: 'axis', valueFormatter: (v) => (typeof v === 'number' ? formatBRL(v) : '—') },
+		legend: {
+			data: ['Receitas', 'Receita prevista', 'Despesas', 'Despesa prevista', 'Média receitas', 'Média despesas'].filter(
+				(n) => mostraReceita || !seriesReceita.includes(n)
+			),
+			bottom: 0
+		},
 		grid: { left: 60, right: 16, top: 16, bottom: 40 },
+			// Roda aproxima/afasta; mínimo 3 meses, máximo 1 ano. Abre mostrando os últimos 12 meses
+			dataZoom: [
+				{
+					type: 'inside',
+					xAxisIndex: 0,
+					minValueSpan: 3,
+					maxValueSpan: 12,
+					startValue: Math.max(data.months.length - 12, 0),
+					endValue: data.months.length - 1,
+					filterMode: 'filter'
+				}
+			],
 		xAxis: {
 			type: 'category',
 			data: data.months.map((m) => monthLabel(m)),
 			axisLabel: { fontSize: 11 }
 		},
 		yAxis: { type: 'value', axisLabel: { formatter: (v: number) => `R$${(v / 1000).toFixed(0)}k`, fontSize: 11 } },
-		series: [
-			{ name: 'Receitas', type: 'bar', data: data.incomeArr, itemStyle: { color: '#157a00' }, barMaxWidth: 28 },
-			{ name: 'Despesas', type: 'bar', data: data.expenseArr, itemStyle: { color: '#b23a4e' }, barMaxWidth: 28 }
-		]
+		series: (<SeriesOption[]>[
+			{ name: 'Receitas', type: 'bar', stack: 'receita', data: data.incomeArr, itemStyle: { color: '#157a00' }, barMaxWidth: 28 },
+			{
+				name: 'Receita prevista',
+				type: 'bar',
+				stack: 'receita',
+				data: faltaReceitaArr,
+				itemStyle: { color: '#06b6d4', opacity: 0.3 },
+				barMaxWidth: 28,
+				tooltip: { valueFormatter: (v) => (typeof v === 'number' ? formatBRL(receitaPrevista) : '—') }
+			},
+			{ name: 'Despesas', type: 'bar', stack: 'despesa', data: evoExpenseArr, itemStyle: { color: '#b23a4e' }, barMaxWidth: 28 },
+			{
+				name: 'Despesa prevista',
+				type: 'bar',
+				stack: 'despesa',
+				data: faltaPrevistaArr,
+				itemStyle: { color: '#06b6d4', opacity: 0.3 },
+				barMaxWidth: 28,
+				tooltip: { valueFormatter: (v) => (typeof v === 'number' ? formatBRL(despesaPrevista) : '—') }
+			},
+			{ name: 'Média receitas', type: 'line', data: runningAvg(data.incomeArr), itemStyle: { color: '#22c55e' }, smooth: true, symbolSize: 5 },
+			{ name: 'Média despesas', type: 'line', data: runningAvg(evoExpenseArr), itemStyle: { color: '#ef4444' }, smooth: true, symbolSize: 5 }
+		]).filter((s) => mostraReceita || !seriesReceita.includes(String(s.name)))
 	});
 
-	const pieOption = $derived({
-		tooltip: { trigger: 'item', formatter: (p: { name: string; value: number; percent: number }) => `${p.name}<br/>${formatBRL(p.value)} (${p.percent.toFixed(1)}%)` },
+	const pieOption = $derived<EChartsOption>({
+		tooltip: { trigger: 'item', formatter: (params) => {
+			const p = params as { name: string; value: number; percent: number };
+			return `${p.name}<br/>${formatBRL(p.value)} (${p.percent.toFixed(1)}%)`;
+		} },
 		series: [
 			{
 				type: 'pie',
@@ -238,29 +338,20 @@
 
 	<!-- Projeção até o próximo salário -->
 	{#if data.projection}
-	<div class="mb-7 rounded-xl border bg-white shadow-sm {nivel === 'ok' ? 'border-emerald-200' : nivel === 'atencao' ? 'border-amber-300' : 'border-red-300'}">
-		<div class="rounded-t-xl px-5 py-3 {nivel === 'ok' ? 'bg-emerald-50' : nivel === 'atencao' ? 'bg-amber-50' : 'bg-red-50'}">
+	<div class="mb-7 rounded-xl border bg-white shadow-sm {nivel === 'ok' ? 'border-emerald-200' : 'border-red-300'}">
+		<div class="rounded-t-xl px-5 py-3 {nivel === 'ok' ? 'bg-emerald-50' : 'bg-red-50'}">
 			<div class="flex items-center justify-between">
 				{#if nivel === 'ok'}
-					<div class="font-semibold text-emerald-700">✓ Colchão completo: sobram {fmt(sobraAteSalario)} depois de pagar tudo</div>
-				{:else if nivel === 'atencao'}
-					<div class="font-semibold text-amber-700">⚠ Fecha sem margem: sobram só {fmt(sobraAteSalario)}. Qualquer imprevisto estoura</div>
+					<div class="font-semibold text-emerald-700">✓ Sobram {fmt(sobraAteSalario)} até o salário, depois de pagar tudo</div>
 				{:else}
 					<div class="font-semibold text-red-700">🚨 Você precisa economizar {fmt(-sobraAteSalario)} até {fmtDate(data.projection.salaryDate)}</div>
 				{/if}
 				<div class="text-xs text-slate-500">próximo salário: {fmtDate(data.projection.salaryDate)}</div>
 			</div>
-			{#if nivel !== 'ok'}
-				<div class="mt-1 text-xs {nivel === 'atencao' ? 'text-amber-700' : 'text-red-600'}">
-					Faltam {fmt(cushion - sobraAteSalario)} para o colchão de {fmt(cushion)}.
-					{#if dicaCorte}Cortar {fmt(cushion - sobraAteSalario)} de {dicaCorte} resolve.{/if}
-				</div>
+			{#if nivel !== 'ok' && dicaCorte}
+				<div class="mt-1 text-xs text-red-600">Cortar {fmt(-sobraAteSalario)} de {dicaCorte} resolve.</div>
 			{/if}
-			<div class="mt-2 flex items-center gap-3">
-				<div class="h-2 flex-1 overflow-hidden rounded-full bg-white/80 ring-1 ring-slate-200">
-					<div class="h-full rounded-full {nivel === 'ok' ? 'bg-emerald-500' : nivel === 'atencao' ? 'bg-amber-500' : 'bg-red-500'}" style="width:{progressoColchao}%"></div>
-				</div>
-				<span class="text-xs font-medium text-slate-600">Colchão {fmt(sobraAteSalario)} de {fmt(cushion)}</span>
+			<div>
 				{#if data.projection.dues.length > 0}
 					<div class="mt-3 rounded-lg bg-white/70 px-3 py-2 text-sm ring-1 ring-slate-200">
 						<div class="font-semibold text-slate-800">
@@ -320,7 +411,7 @@
 					{/each}
 				</div>
 				{#if !data.projection?.salaryAmount}
-					<div class="mt-1 text-xs text-slate-400">Cadastre o salário em Configurações para ver quando a conta volta ao positivo.</div>
+					<div class="mt-1 text-xs text-slate-400">Cadastre a receita prevista do mês em Previsto para ver quando a conta volta ao positivo.</div>
 				{/if}
 			</div>
 		{/if}
@@ -330,8 +421,21 @@
 	<!-- Charts -->
 	<div class="mb-7 grid grid-cols-5 gap-5">
 		<div class="col-span-3 rounded-xl border border-slate-100 bg-white p-5 shadow-sm">
-			<div class="mb-4 text-sm font-semibold text-slate-700">Evolução mensal</div>
-			<EChart option={evolutionOption} height="260px" />
+			<div class="mb-4 flex items-center justify-between gap-3">
+				<span class="text-sm font-semibold text-slate-700">Evolução mensal</span>
+				<div class="flex items-center gap-3">
+					{#if evoGroup !== 'todos'}
+						<span class="text-xs text-slate-500">{formatBRL(evoTotal)} <span class="text-slate-400">{evoTotalLabel}</span></span>
+					{/if}
+					<select bind:value={evoGroup} class="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600">
+					<option value="todos">Todos os grupos</option>
+					{#each data.groupOptions as g (g.code)}
+						<option value={g.code}>{g.name}</option>
+					{/each}
+				</select>
+				</div>
+			</div>
+			<EChart option={evolutionOption} height="260px" onzoom={onEvoZoom} />
 		</div>
 		<div class="col-span-2 rounded-xl border border-slate-100 bg-white p-5 shadow-sm">
 			<div class="mb-3 flex items-center justify-between">
@@ -537,20 +641,5 @@
 			</div>
 		</div>
 	{/if}
-
-	<!-- Fechamento do mês -->
-	<a
-		href="/fechamento?month={data.ym}"
-		class="mt-5 flex items-center justify-between rounded-xl border px-6 py-4 shadow-sm transition-colors {data.hasNotes ? 'border-emerald-200 bg-emerald-50 hover:bg-emerald-100' : 'border-indigo-100 bg-white hover:bg-indigo-50'}"
-	>
-		<div class="flex items-center gap-3">
-			<span class="text-2xl">{data.hasNotes ? '✅' : '📋'}</span>
-			<div>
-				<div class="font-semibold {data.hasNotes ? 'text-emerald-800' : 'text-slate-800'}">Fechamento de {monthLabel(data.ym)}</div>
-				<div class="text-xs {data.hasNotes ? 'text-emerald-600' : 'text-slate-400'}">{data.hasNotes ? 'Preenchido — clique para editar' : 'Registrar imprevistos, gastos supérfluos e plano de ação'}</div>
-			</div>
-		</div>
-		<span class="text-sm font-medium {data.hasNotes ? 'text-emerald-700' : 'text-indigo-600'}">{data.hasNotes ? 'Editar →' : 'Preencher →'}</span>
-	</a>
 
 </div>
