@@ -1,16 +1,16 @@
 # Controle de Gastos
 
-Aplicação pessoal de controle financeiro: categoriza receitas e despesas, projeta orçamento mensal, fecha o mês e sincroniza transações bancárias automaticamente via Open Finance (Pluggy).
+Aplicação pessoal de controle financeiro: categoriza receitas e despesas, projeta orçamento mensal e acompanha metas financeiras.
 
 ## Funcionalidades
 
-- **Dashboard** com visão consolidada por mês (gráficos via ECharts).
+- **Dashboard** com visão consolidada por mês, saldo atual, fluxo de caixa até o próximo salário e gráficos (ECharts).
 - **Transações**: lançamento manual, edição e categorização.
 - **Categorias e grupos**: organização de receitas/despesas por grupo (ex. Moradia, Alimentação, Transporte).
-- **Orçamento previsto** por categoria e mês.
-- **Fechamento mensal**: imprevistos, gastos superfluos, observações.
+- **Orçamento previsto** por categoria e mês, com receita prevista e cópia de um mês para outro.
+- **Metas financeiras**: reserva, viagem, imóvel, com progresso e quanto guardar por mês para cumprir o prazo.
+- **Antecipação de parcelas**: registra o desconto obtido ao pagar antes do vencimento.
 - **Importação** de extratos (CSV/XLSX), com parsing de datas e valores em formato brasileiro.
-- **Sincronização automática** com contas bancárias via [Pluggy](https://pluggy.ai) (Open Finance), com deduplicação por ID da transação.
 
 ## Screenshots
 
@@ -18,9 +18,15 @@ Aplicação pessoal de controle financeiro: categoriza receitas e despesas, proj
 | --- | --- |
 | ![Dashboard](static/screenshots/dashboard.jpg) | ![Lançamentos](static/screenshots/lancamentos.jpg) |
 
+| Previsto | Metas |
+| --- | --- |
+| ![Previsto](static/screenshots/previsto.jpg) | ![Metas](static/screenshots/metas.jpg) |
+
 | Categorias | Importação |
 | --- | --- |
 | ![Categorias](static/screenshots/categorias.jpg) | ![Importação](static/screenshots/importar.jpg) |
+
+Os dados das capturas são fictícios.
 
 ## Stack
 
@@ -43,8 +49,6 @@ Edite o `.env`:
 
 ```
 DATABASE_URL=local.db
-PLUGGY_CLIENT_ID=       # opcional, só necessário para sincronização bancária
-PLUGGY_CLIENT_SECRET=   # opcional, obtido em https://dashboard.pluggy.ai
 ```
 
 Aplique o schema no banco e (opcionalmente) popule categorias padrão:
@@ -80,11 +84,9 @@ src/
   lib/
     server/
       db/          schema, seed, acesso a dados
-      pluggy.ts    integração com a API Pluggy
-      pluggy-sync.ts  sincronização automática de transações
     utils/         funções puras (formatação, parsing)
     components/    componentes Svelte reutilizáveis
   routes/
-    api/           endpoints REST (import, pluggy)
-    dashboard, transactions, categories, previsto, fechamento, settings
+    api/           endpoints REST (import)
+    dashboard, transactions, previsto, metas, settings (geral, categorias, importar)
 ```
